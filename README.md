@@ -1,10 +1,10 @@
 PABLO CORAL,
-AI PROJECT PART 3 - self code using autokeras
+AI PROJECT FINAL REPORT - self code using autokeras and Codex
 
 - Utilized Autokeras to run an ML model to predict sea turtle species
 - "Cammy" bot was unable to recognize image URLs, which is why it was not used.
 
-MUST follow the following folder struct:
+MUST follow the following folder struct to run:
 
 PYTRAINER [root]
 -> images [all included in latest push] (folder)
@@ -12,3 +12,5 @@ PYTRAINER [root]
 -> currentpredictor.py [use to predict single image once trainer has been ran and model is stored] (file)
 -> maintrainer.py [use before running currentpredictor, to create .keras model] (file)
 -> labels.csv [labeled data] (file)
+
+@ latest commit 11/17 fixed software bloat issues from Codex agent. 
