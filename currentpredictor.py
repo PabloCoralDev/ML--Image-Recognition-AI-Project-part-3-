@@ -1,3 +1,4 @@
+#Pablo Coral - AI PROJECT PART 3 tester
 import json
 import autokeras as ak
 import tensorflow as tf
@@ -24,4 +25,5 @@ image = tf.expand_dims(image, 0)
 probs = model.predict(image, verbose=0)[0]
 idx = int(probs.argmax())
 
-print(f"{classes[idx]}, with a certainty of {round(float(probs[idx]),3)*100}%")
+#final output
+print(f"\n{classes[idx]}, with a certainty of {round(float(probs[idx]),3)*100}%\n")

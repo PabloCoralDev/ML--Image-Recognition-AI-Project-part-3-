@@ -8,6 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 
 #key imports!! [autokeras later]
+import autokeras as ak
 import numpy as np
 import tensorflow as tf
 
@@ -15,14 +16,14 @@ import tensorflow as tf
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 # -------- basic setup --------
-TRAIN_IMAGES_DIR = Path("images")
+TRAIN_IMAGES_DIR = Path("images") #all the images are here
 LABELS_CSV = Path("labels.csv")
 PREDICT_IMAGE = Path("predict_image/current.jpeg") #This COULD be a jpeg or jpg!!!
 OUTPUT_DIR = Path("results")
 
 IMG_SIZE = 224 #standard img size
 BATCH = 32 #standard batch size - matches my Mac memory capacity
-VAL_SPLIT = 0.2
+VAL_SPLIT = 0.2 #just an industry standard
 EPOCHS = 10 #try 10 epochs first; increase if needed
 TRIALS = 3
 SEED = 42 # just a random seed; iykyk 42 is the answer
@@ -56,6 +57,7 @@ def read_labels():
     items = []
     with open(LABELS_CSV, newline="") as f:
         reader = csv.reader(f)
+        
         for row in reader:
             if len(row) < 2:
                 continue
@@ -78,15 +80,30 @@ def stratified_split(items): #avoid bias and keep even distribution of training 
     rng = random.Random(SEED)
     by_label = defaultdict(list)
     for item in items:
-        by_label[item["label"]].append(item)
+        by_label[item["label"]].append(item) #group all images by label --> builds a dictionary
 
-    train, val = [], []
+    '''
+    ie: {
+            "[hawksbill]: [path1, path2, path3...],
+            "[loggerhead]: [lpath1, lpath2, lpath3, ...],
+            etc...
+        }
+
+    because we must stratify each class independently.
+    '''
+
+    #split training set here
+    train, val = [], [] 
     for label, group in by_label.items():
         if len(group) == 1:
-            train.extend(group)
+            train.extend(group) #very cool stuff I didn't know
+            '''
+            IF class has a single element, do not put it into validation (false positives), 
+            put it into the training set instead!
+            '''
             continue
 
-        k = max(1, int(round(VAL_SPLIT * len(group))))
+        k = max(1, int(round(VAL_SPLIT * len(group)))) #choose k=1 if % of class going to validation is practically none (send at least a sample to validation)
         rng.shuffle(group)
         val.extend(group[:k])
         train.extend(group[k:])
@@ -98,6 +115,7 @@ def load_predict_image():
 
     if PREDICT_IMAGE is None:
         return None
+    
     image_path = Path(PREDICT_IMAGE)
     if not image_path.exists():
         print(f"[WARN] Prediction image not found: {image_path}. Skipping prediction.")
@@ -107,22 +125,20 @@ def load_predict_image():
     img = tf.io.read_file(str(image_path))
     img = tf.io.decode_image(img, channels=3, expand_animations=False)
     img = tf.image.resize(img, (IMG_SIZE, IMG_SIZE))
-    img = tf.cast(img, tf.float32) / 255.0
+    img = tf.cast(img, tf.float32) / 255.0 #normalize img RGB tensor to go from 0 to 1
+
     return tf.expand_dims(img, axis=0), image_path.name
 
-
-def ensure_dir(path: Path):
-    path.mkdir(parents=True, exist_ok=True)
-
+def ensure_dir(path: Path): path.mkdir(parents=True, exist_ok=True)
 
 def train_and_predict():
-    # pull labels from disk and build a class lookup table
+
+    #pull labels from file and build a class lookup table
     items = read_labels()
     classes = sorted({item["label"] for item in items}, key=lambda x: x.lower())
     class_to_id = {name: idx for idx, name in enumerate(classes)}
 
-    for item in items:
-        item["y"] = class_to_id[item["label"]]
+    for item in items: item["y"] = class_to_id[item["label"]]
 
     train_items, val_items = stratified_split(items)
 
@@ -140,6 +156,7 @@ def train_and_predict():
             return img, label
 
         ds = ds.map(load, num_parallel_calls=tf.data.AUTOTUNE)
+
         if shuffle:
             ds = ds.shuffle(buffer_size=min(1000, len(paths)), seed=SEED, reshuffle_each_iteration=True)
         return ds.batch(BATCH).prefetch(tf.data.AUTOTUNE)
@@ -150,19 +167,9 @@ def train_and_predict():
     #Make sure output artifacts land in a real folder --> handy little function
     ensure_dir(OUTPUT_DIR)
 
-    #Try autokeras import after preprocessing to avoid any training/runtime issues
-    try:
-        import autokeras as ak
-    except ImportError:
-        raise SystemExit("Install AutoKeras: pip install autokeras tensorflow numpy")
-
-    #Build AutoKeras image classifier search space
+    #Build AutoKeras image classifier search space --> codex helped 
     input_node = ak.ImageInput()
-    output_node = ak.ImageBlock(
-        block_type="vanilla",
-        normalize=True,
-        augment=False,
-    )(input_node)
+    output_node = ak.ImageBlock(block_type="vanilla", normalize=True, augment=False, )(input_node)
     output_node = ak.ClassificationHead()(output_node)
 
     clf = ak.AutoModel(
@@ -174,10 +181,9 @@ def train_and_predict():
         seed=SEED,
         directory=str(OUTPUT_DIR),
         project_name="ak_project",
-
     )
 
-    #Train the model search and keep the best candidate
+    #Train the model search and keep the best candidate (regression!)
     clf.fit(train_ds, validation_data=val_ds, epochs=EPOCHS, verbose=2)
 
     model = clf.export_model()
@@ -201,8 +207,7 @@ def train_and_predict():
 
 
 def main():
-    random.seed(SEED)
-    np.random.seed(SEED)
+    np.random.seed(SEED) #apparently autokeras needs this
     tf.random.set_seed(SEED)
     train_and_predict()
 
